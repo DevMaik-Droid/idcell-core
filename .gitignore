@@ -43,4 +43,5 @@ next-env.d.ts
 
 .env
 .next
+.vscode
 node_modules/
