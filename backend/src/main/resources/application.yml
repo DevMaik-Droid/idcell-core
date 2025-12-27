@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: idcell-backend
+  data:
+    redis:
+      url: ${REDIS_URL}
+      repositories:
+        enabled: false
+
+  r2dbc:
+    url: r2dbc:postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+
+minio:
+  public-endpoint: ${SERVIDOR_APP}/storage
+  endpoint: ${MINIO_ENDPOINT}
+  user: ${MINIO_ROOT_USER}
+  password: ${MINIO_ROOT_PASSWORD}
+  region: ${MINIO_REGION}
+
+server:
+  port: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: [ "prometheus", "health" ]
+  health:
+    r2dbc:
+      enabled: true

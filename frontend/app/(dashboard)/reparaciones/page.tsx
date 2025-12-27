@@ -1,15 +1,28 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Eye, Wrench, Clock, CheckCircle, Package } from "lucide-react"
+import type React from "react"
+import { Plus, Eye, Wrench, Clock, CheckCircle, Package, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { useAuth } from "@/shared/hooks/use-auth"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type EstadoReparacion = "pendiente" | "en_proceso" | "terminado" | "entregado"
 
@@ -43,10 +56,7 @@ const componentesDisponibles = [
 ]
 
 export default function ReparacionesPage() {
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [selectedReparacion, setSelectedReparacion] = useState<Reparacion | null>(null)
-  const [componentesModal, setComponentesModal] = useState<ComponenteUsado[]>([])
-
+  const { sucursal } = useAuth()
   const [reparaciones, setReparaciones] = useState<Reparacion[]>([
     {
       id: "REP-55",
@@ -84,6 +94,76 @@ export default function ReparacionesPage() {
     },
   ])
 
+  const [selectedReparacion, setSelectedReparacion] = useState<Reparacion | null>(null)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [componentesModal, setComponentesModal] = useState<ComponenteUsado[]>([])
+
+  const [formData, setFormData] = useState({
+    cliente_nombre: "",
+    equipo: "",
+    problema_reportado: "",
+    diagnostico: "",
+    estado: "pendiente" as EstadoReparacion,
+    tecnico_nombre: "",
+    costo_estimado: 0,
+  })
+
+  const handleOpenForm = (rep?: Reparacion) => {
+    if (rep) {
+      setSelectedReparacion(rep) // Used for logic consistency
+      setFormData({
+        cliente_nombre: rep.cliente_nombre,
+        equipo: rep.equipo,
+        problema_reportado: rep.problema_reportado,
+        diagnostico: rep.diagnostico || "",
+        estado: rep.estado,
+        tecnico_nombre: rep.tecnico_nombre,
+        costo_estimado: rep.costo_estimado || 0,
+      })
+      setIsEditMode(true)
+    } else {
+      setSelectedReparacion(null)
+      setFormData({
+        cliente_nombre: "",
+        equipo: "",
+        problema_reportado: "",
+        diagnostico: "",
+        estado: "pendiente",
+        tecnico_nombre: "",
+        costo_estimado: 0,
+      })
+      setIsEditMode(false)
+    }
+    setIsFormModalOpen(true)
+  }
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isEditMode && selectedReparacion) {
+      setReparaciones(reparaciones.map((r) => (r.id === selectedReparacion.id ? { ...r, ...formData } : r)))
+    } else {
+      const newRep = {
+        id: `REP-${Math.floor(Math.random() * 1000)}`,
+        ...formData,
+        fecha_creacion: new Date().toISOString(),
+        componentes_usados: [],
+      }
+      setReparaciones([...reparaciones, newRep])
+    }
+    setIsFormModalOpen(false)
+  }
+
+  const handleDelete = () => {
+    if (selectedReparacion) {
+      setReparaciones(reparaciones.filter((r) => r.id !== selectedReparacion.id))
+      setIsDeleteDialogOpen(false)
+      setSelectedReparacion(null)
+    }
+  }
+
   const agregarComponente = (componenteId: string) => {
     const componente = componentesDisponibles.find((c) => c.id === componenteId)
     if (!componente) return
@@ -106,13 +186,12 @@ export default function ReparacionesPage() {
 
   const guardarComponentes = () => {
     if (!selectedReparacion) return
-
     setReparaciones(
       reparaciones.map((r) => (r.id === selectedReparacion.id ? { ...r, componentes_usados: componentesModal } : r)),
     )
-    console.log("[v0] Componentes guardados para reparación:", selectedReparacion.id, componentesModal)
     setSelectedReparacion(null)
     setComponentesModal([])
+    setIsViewModalOpen(false)
   }
 
   const getEstadoBadge = (estado: EstadoReparacion) => {
@@ -148,104 +227,72 @@ export default function ReparacionesPage() {
     }
   }
 
+  const currentReparaciones = reparaciones.filter((r) => (sucursal?.id === "1" ? true : r.id.includes("55")))
+
   const stats = {
-    pendientes: reparaciones.filter((r) => r.estado === "pendiente").length,
-    en_proceso: reparaciones.filter((r) => r.estado === "en_proceso").length,
-    terminadas: reparaciones.filter((r) => r.estado === "terminado").length,
+    pendientes: currentReparaciones.filter((r) => r.estado === "pendiente").length,
+    en_proceso: currentReparaciones.filter((r) => r.estado === "en_proceso").length,
+    terminadas: currentReparaciones.filter((r) => r.estado === "terminado").length,
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reparaciones</h1>
-          <p className="text-muted-foreground mt-1">Gestión de órdenes de servicio técnico</p>
+    <div className="space-y-8 animate-in slide-in-from-bottom-2 duration-700">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-light tracking-tight">Servicio Técnico</h1>
+          <p className="text-muted-foreground">
+            Monitoreo de órdenes en <span className="text-primary font-medium">{sucursal?.nombre}</span>
+          </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nueva Reparación
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Orden de Reparación</DialogTitle>
-            </DialogHeader>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                setIsDialogOpen(false)
-              }}
-              className="grid gap-4 py-4"
-            >
-              <div className="space-y-2">
-                <Label>Cliente</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Juan Pérez - +1234567890</SelectItem>
-                    <SelectItem value="2">Maria G. - +0987654321</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Equipo</Label>
-                <Input required placeholder="Ej. iPhone 13 Pro" />
-              </div>
-              <div className="space-y-2">
-                <Label>Problema Reportado</Label>
-                <textarea
-                  required
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="Descripción del fallo..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Costo Estimado (Opcional)</Label>
-                <Input type="number" placeholder="0.00" />
-              </div>
-              <Button type="submit" className="w-full">
-                Generar Orden
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button
+          className="h-11 px-8 rounded-full shadow-sm hover:shadow-md transition-all gap-2"
+          onClick={() => handleOpenForm()}
+        >
+          <Plus className="h-4 w-4" />
+          Registrar Reparación
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pendientes</CardTitle>
-            <Clock className="h-4 w-4 text-warning" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="shadow-none border-border/60 bg-white/50 backdrop-blur-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Diagnóstico</span>
+              <Clock className="h-4 w-4 text-secondary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pendientes}</div>
+            <div className="text-3xl font-light">{stats.pendientes}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Órdenes esperando revisión</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">En Proceso</CardTitle>
-            <Wrench className="h-4 w-4 text-primary" />
+        <Card className="shadow-none border-border/60 bg-white/50 backdrop-blur-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">En Proceso</span>
+              <Wrench className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.en_proceso}</div>
+            <div className="text-3xl font-light">{stats.en_proceso}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Órdenes en curso de reparación</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Terminadas</CardTitle>
-            <CheckCircle className="h-4 w-4 text-success" />
+        <Card className="shadow-none border-border/60 bg-white/50 backdrop-blur-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Terminadas</span>
+              <CheckCircle className="h-4 w-4 text-success" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.terminadas}</div>
+            <div className="text-3xl font-light">{stats.terminadas}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Órdenes finalizadas</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-border/60 shadow-none overflow-hidden rounded-2xl">
         <CardHeader>
           <CardTitle>Órdenes de Reparación</CardTitle>
         </CardHeader>
@@ -256,24 +303,18 @@ export default function ReparacionesPage() {
                 <TableHead>ID</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Equipo</TableHead>
-                <TableHead>Problema</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Técnico</TableHead>
                 <TableHead>Componentes</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {reparaciones.map((rep) => (
+              {currentReparaciones.map((rep) => (
                 <TableRow key={rep.id}>
                   <TableCell className="font-mono text-xs">#{rep.id}</TableCell>
                   <TableCell className="font-medium">{rep.cliente_nombre}</TableCell>
                   <TableCell className="text-sm">{rep.equipo}</TableCell>
-                  <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
-                    {rep.problema_reportado}
-                  </TableCell>
                   <TableCell>{getEstadoBadge(rep.estado)}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{rep.tecnico_nombre}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="gap-1">
                       <Package className="h-3 w-3" />
@@ -281,17 +322,34 @@ export default function ReparacionesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => {
-                        setSelectedReparacion(rep)
-                        setComponentesModal(rep.componentes_usados)
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => {
+                          setSelectedReparacion(rep)
+                          setComponentesModal(rep.componentes_usados)
+                          setIsViewModalOpen(true)
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenForm(rep)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => {
+                          setSelectedReparacion(rep)
+                          setIsDeleteDialogOpen(true)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -300,7 +358,7 @@ export default function ReparacionesPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedReparacion} onOpenChange={(open) => !open && setSelectedReparacion(null)}>
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
           {selectedReparacion && (
             <div className="space-y-6">
@@ -312,41 +370,41 @@ export default function ReparacionesPage() {
               </DialogHeader>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Cliente</Label>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs uppercase">Cliente</Label>
                   <p className="font-semibold">{selectedReparacion.cliente_nombre}</p>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Equipo</Label>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs uppercase">Equipo</Label>
                   <p className="font-semibold">{selectedReparacion.equipo}</p>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Estado</Label>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs uppercase">Estado</Label>
                   <div>{getEstadoBadge(selectedReparacion.estado)}</div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Técnico Asignado</Label>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs uppercase">Técnico Asignado</Label>
                   <p className="font-semibold">{selectedReparacion.tecnico_nombre}</p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">Problema Reportado</Label>
-                <p className="text-sm">{selectedReparacion.problema_reportado}</p>
+              <div className="space-y-1">
+                <Label className="text-muted-foreground text-xs uppercase">Problema Reportado</Label>
+                <p className="text-sm bg-muted/30 p-3 rounded-md">{selectedReparacion.problema_reportado}</p>
               </div>
 
               {selectedReparacion.diagnostico && (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Diagnóstico</Label>
-                  <p className="text-sm">{selectedReparacion.diagnostico}</p>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs uppercase">Diagnóstico</Label>
+                  <p className="text-sm bg-muted/30 p-3 rounded-md italic">{selectedReparacion.diagnostico}</p>
                 </div>
               )}
 
               <div className="space-y-4 border-t pt-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <Label className="text-base font-semibold">Componentes Utilizados</Label>
                   <Select onValueChange={agregarComponente}>
-                    <SelectTrigger className="w-[250px]">
+                    <SelectTrigger className="w-full sm:w-[250px]">
                       <SelectValue placeholder="Agregar componente..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -359,56 +417,169 @@ export default function ReparacionesPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
                   {componentesModal.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No hay componentes registrados aún</p>
+                    <p className="text-sm text-muted-foreground text-center py-6 bg-muted/20 rounded-lg">
+                      No hay componentes registrados
+                    </p>
                   ) : (
                     componentesModal.map((comp) => (
-                      <div key={comp.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div key={comp.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg group">
                         <div className="flex-1">
                           <p className="font-medium text-sm">{comp.nombre}</p>
                           <p className="text-xs text-muted-foreground">${comp.precio} c/u</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7 bg-transparent"
-                            onClick={() => actualizarCantidad(comp.id, comp.cantidad - 1)}
-                          >
-                            -
-                          </Button>
-                          <span className="w-8 text-center font-semibold">{comp.cantidad}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7 bg-transparent"
-                            onClick={() => actualizarCantidad(comp.id, comp.cantidad + 1)}
-                          >
-                            +
-                          </Button>
-                          <span className="ml-2 font-semibold text-primary">${comp.precio * comp.cantidad}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 bg-transparent border-muted-foreground/20"
+                              onClick={() => actualizarCantidad(comp.id, comp.cantidad - 1)}
+                            >
+                              -
+                            </Button>
+                            <span className="w-6 text-center font-semibold">{comp.cantidad}</span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 bg-transparent border-muted-foreground/20"
+                              onClick={() => actualizarCantidad(comp.id, comp.cantidad + 1)}
+                            >
+                              +
+                            </Button>
+                          </div>
+                          <span className="w-16 text-right font-bold text-primary">
+                            ${(comp.precio * comp.cantidad).toFixed(2)}
+                          </span>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <span className="font-semibold">Total Componentes</span>
-                  <span className="text-xl font-bold text-primary">
+                <div className="flex items-center justify-between pt-4 border-t px-1">
+                  <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">
+                    Total Componentes
+                  </span>
+                  <span className="text-2xl font-black text-primary">
                     ${componentesModal.reduce((sum, c) => sum + c.precio * c.cantidad, 0).toFixed(2)}
                   </span>
                 </div>
 
-                <Button className="w-full" onClick={guardarComponentes}>
-                  Guardar Componentes
+                <Button className="w-full h-11 rounded-xl shadow-lg" onClick={guardarComponentes}>
+                  Actualizar Registro de Partes
                 </Button>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isFormModalOpen} onOpenChange={setIsFormModalOpen}>
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isEditMode ? "Modificar Orden" : "Nueva Orden de Servicio"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSave} className="grid gap-5 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label>Nombre del Cliente</Label>
+                <Input
+                  required
+                  placeholder="Ej. Juan Pérez"
+                  value={formData.cliente_nombre}
+                  onChange={(e) => setFormData({ ...formData, cliente_nombre: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Equipo</Label>
+                <Input
+                  required
+                  placeholder="Ej. iPhone 13 Pro"
+                  value={formData.equipo}
+                  onChange={(e) => setFormData({ ...formData, equipo: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Técnico Asignado</Label>
+                <Input
+                  required
+                  placeholder="Ej. Carlos Ruiz"
+                  value={formData.tecnico_nombre}
+                  onChange={(e) => setFormData({ ...formData, tecnico_nombre: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Estado Inicial</Label>
+                <Select
+                  value={formData.estado}
+                  onValueChange={(val) => setFormData({ ...formData, estado: val as EstadoReparacion })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="en_proceso">En Proceso</SelectItem>
+                    <SelectItem value="terminado">Terminado</SelectItem>
+                    <SelectItem value="entregado">Entregado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Costo Estimado ($)</Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.costo_estimado}
+                  onChange={(e) => setFormData({ ...formData, costo_estimado: Number(e.target.value) })}
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Problema Reportado</Label>
+                <Textarea
+                  required
+                  placeholder="Descripción detallada del fallo..."
+                  value={formData.problema_reportado}
+                  onChange={(e) => setFormData({ ...formData, problema_reportado: e.target.value })}
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Diagnóstico Técnico</Label>
+                <Textarea
+                  placeholder="Resultados de la revisión inicial..."
+                  value={formData.diagnostico}
+                  onChange={(e) => setFormData({ ...formData, diagnostico: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsFormModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit">{isEditMode ? "Actualizar Orden" : "Generar Orden"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará permanentemente la orden #{selectedReparacion?.id} del sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Eliminar Permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -1,14 +1,31 @@
 "use client"
 import { useState } from "react"
-import { Plus, Search, Smartphone } from "lucide-react"
+import type React from "react"
+
+import { Plus, Search, Smartphone, Pencil, Trash2, MoreHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import Image from "next/image"
-import { cn } from "@/shared/lib/utils"
+import { useAuth } from "@/shared/hooks/use-auth"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import DialogCompatibilidad from "@/features/inventario/components/dialogs/compatibilidad"
+import DialogViewProduct from "@/features/inventario/components/dialogs/view-product"
+import DialogRegisterProduct from "@/features/inventario/components/dialogs/register-product"
 
 const celularesDisponibles = [
   "iPhone 15 Pro Max",
@@ -77,7 +94,16 @@ const inventoryItems = [
     imagen: "/apple-airpods-pro-2-white.jpg",
     descripcion: "Audífonos con cancelación de ruido activa",
     atributos: { color: "Blanco", conectividad: "Bluetooth 5.3", bateria: "30h" },
-    compatibilidad: ["iPhone 15 Pro Max", "iPhone 15 Pro", "iPhone 15", "iPhone 14 Pro Max", "iPhone 14", "iPhone 13"],
+    compatibilidad: [
+      "iPhone 15 Pro Max",
+      "iPhone 15 Pro",
+      "iPhone 15",
+      "Samsung Galaxy S24 Ultra",
+      "Samsung Galaxy S24+",
+      "Samsung Galaxy S24",
+      "Xiaomi 13 Pro",
+      "Google Pixel 8 Pro",
+    ],
   },
   {
     id: 5,
@@ -115,15 +141,86 @@ const inventoryItems = [
 ]
 
 export default function InventarioPage() {
+  const { sucursal } = useAuth()
+  const [items, setItems] = useState(inventoryItems)
   const [selectedItem, setSelectedItem] = useState<(typeof inventoryItems)[0] | null>(null)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [isCompatibilityMode, setIsCompatibilityMode] = useState(false)
   const [compatibilidadEdit, setCompatibilidadEdit] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+
+  const [formData, setFormData] = useState({
+    nombre: "",
+    categoria: "Accesorios",
+    stock: 0,
+    precioVenta: 0,
+    precioCompra: 0,
+    descripcion: "",
+    imagen: "/placeholder.svg",
+    atributos: {} as Record<string, string>,
+  })
+
+  const handleOpenForm = (item?: (typeof inventoryItems)[0]) => {
+    if (item) {
+      setSelectedItem(item)
+      setFormData({
+        nombre: item.nombre,
+        categoria: item.categoria,
+        stock: item.stock,
+        precioVenta: item.precioVenta,
+        precioCompra: item.precioCompra,
+        descripcion: item.descripcion,
+        imagen: item.imagen,
+        atributos: { ...item.atributos },
+      })
+      setIsEditMode(true)
+    } else {
+      setSelectedItem(null)
+      setFormData({
+        nombre: "",
+        categoria: "Accesorios",
+        stock: 0,
+        precioVenta: 0,
+        precioCompra: 0,
+        descripcion: "",
+        imagen: "/placeholder.svg",
+        atributos: {},
+      })
+      setIsEditMode(false)
+    }
+    setIsFormModalOpen(true)
+  }
+
+  const handleDelete = () => {
+    if (selectedItem) {
+      setItems(items.filter((i) => i.id !== selectedItem.id))
+      setIsDeleteDialogOpen(false)
+      setSelectedItem(null)
+    }
+  }
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isEditMode && selectedItem) {
+      setItems(items.map((i) => (i.id === selectedItem.id ? { ...i, ...formData } : i)))
+    } else {
+      const newItem = {
+        id: Math.max(...items.map((i) => i.id)) + 1,
+        ...formData,
+        compatibilidad: [],
+      }
+      setItems([...items, newItem])
+    }
+    setIsFormModalOpen(false)
+  }
 
   const handleEditCompatibility = (item: (typeof inventoryItems)[0]) => {
     setSelectedItem(item)
     setCompatibilidadEdit(item.compatibilidad || [])
-    setIsEditMode(true)
+    setIsCompatibilityMode(true)
   }
 
   const toggleCompatibilidad = (celular: string) => {
@@ -136,25 +233,31 @@ export default function InventarioPage() {
 
   const guardarCompatibilidad = () => {
     if (!selectedItem) return
-    console.log("[v0] Compatibilidad guardada para producto:", selectedItem.id, compatibilidadEdit)
-    // Actualizar el item con la nueva compatibilidad
-    selectedItem.compatibilidad = compatibilidadEdit
-    setIsEditMode(false)
+    setItems(items.map((i) => (i.id === selectedItem.id ? { ...i, compatibilidad: compatibilidadEdit } : i)))
+    setIsCompatibilityMode(false)
     setSelectedItem(null)
   }
 
-  const filteredItems = inventoryItems.filter((item) => item.nombre.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredItems = items.filter((item) => {
+    const matchesSearch = item.nombre.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesSearch
+  })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventario</h1>
-          <p className="text-muted-foreground mt-1">Gestiona tu catálogo de productos y existencias</p>
+          <h1 className="text-4xl font-light tracking-tight text-foreground">Catálogo Maestro</h1>
+          <p className="text-muted-foreground mt-1">
+            Gestión de inventario premium • <span className="font-medium text-primary">{sucursal?.nombre}</span>
+          </p>
         </div>
-        <Button className="gap-2">
+        <Button
+          className="h-11 px-6 shadow-sm hover:shadow-md transition-all gap-2 rounded-full"
+          onClick={() => handleOpenForm()}
+        >
           <Plus className="h-4 w-4" />
-          Nuevo Producto
+          Registrar Producto
         </Button>
       </div>
 
@@ -168,205 +271,124 @@ export default function InventarioPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className="group cursor-pointer rounded-xl border border-border bg-card transition-all hover:border-primary hover:shadow-lg"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:border-primary/30 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] cursor-pointer"
             onClick={() => {
               setSelectedItem(item)
-              setIsEditMode(false)
+              setIsViewModalOpen(true)
             }}
           >
-            <div className="relative aspect-[4/5] overflow-hidden rounded-t-xl bg-muted">
+            <div className="relative aspect-[3/4] overflow-hidden bg-muted">
               <Image
                 src={item.imagen || "/placeholder.svg"}
                 alt={item.nombre}
                 fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                className="object-cover transition-transform duration-700 group-hover:scale-105"
               />
-              <div className="absolute top-3 left-3">
-                <Badge
-                  className={cn(
-                    "font-semibold",
-                    item.stock < 10 ? "bg-destructive text-destructive-foreground" : "bg-background/90 backdrop-blur",
-                  )}
-                >
-                  {item.stock} u.
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute top-4 left-4">
+                <Badge className="bg-white/90 text-foreground backdrop-blur-md border-none px-3 py-1 shadow-sm">
+                  {item.stock} disponibles
                 </Badge>
               </div>
-              {item.compatibilidad && item.compatibilidad.length > 0 && (
-                <div className="absolute top-3 right-3">
-                  <Badge className="bg-primary/90 text-primary-foreground backdrop-blur gap-1">
-                    <Smartphone className="h-3 w-3" />
-                    {item.compatibilidad.length}
-                  </Badge>
-                </div>
-              )}
             </div>
-            <div className="p-4 space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+            <div className="p-5 space-y-3">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                  {item.categoria}
+                </span>
+                <h3 className="text-lg font-medium leading-snug group-hover:text-primary transition-colors">
                   {item.nombre}
                 </h3>
               </div>
-              <div className="flex items-center justify-between">
-                <Badge variant="outline" className="text-xs">
-                  {item.categoria}
-                </Badge>
-                <span className="text-lg font-bold text-primary">${item.precioVenta.toLocaleString()}</span>
+              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                <span className="text-xl font-light">${item.precioVenta.toLocaleString()}</span>
+                <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus className="h-4 w-4 text-primary" />
+                </div>
               </div>
+            </div>
+            <div className="absolute top-4 right-4 z-10">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 backdrop-blur-md">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleOpenForm(item)
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" /> Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedItem(item)
+                      setIsDeleteDialogOpen(true)
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         ))}
       </div>
 
-      <Dialog
-        open={!!selectedItem && !isEditMode}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedItem(null)
-            setIsEditMode(false)
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-          {selectedItem && (
-            <div className="grid md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <div className="relative aspect-square overflow-hidden rounded-xl bg-muted">
-                  <Image
-                    src={selectedItem.imagen || "/placeholder.svg"}
-                    alt={selectedItem.nombre}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                {selectedItem.compatibilidad && selectedItem.compatibilidad.length > 0 && (
-                  <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="h-4 w-4 text-primary" />
-                      <Label className="font-semibold">Compatible con:</Label>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedItem.compatibilidad.map((celular) => (
-                        <Badge key={celular} variant="secondary" className="text-xs">
-                          {celular}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+      <DialogViewProduct
+        isViewModalOpen={isViewModalOpen}
+        handleOpenForm={handleOpenForm}
+        handleEditCompatibility={handleEditCompatibility}
+        setIsViewModalOpen={setIsViewModalOpen}
+        selectedItem={selectedItem}
+      />
 
-              <div className="space-y-6">
-                <div>
-                  <DialogHeader>
-                    <DialogTitle className="text-2xl">{selectedItem.nombre}</DialogTitle>
-                  </DialogHeader>
-                  <Badge variant="outline" className="mt-2">
-                    {selectedItem.categoria}
-                  </Badge>
-                </div>
 
-                <p className="text-muted-foreground leading-relaxed">{selectedItem.descripcion}</p>
+      <DialogRegisterProduct
+        isFormModalOpen={isFormModalOpen}
+        setIsFormModalOpen={setIsFormModalOpen}
+        isEditMode={isEditMode}
+        handleSave={handleSave}
+        formData={formData}
+        setFormData={setFormData}
+      />
 
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Precio Venta</Label>
-                    <p className="text-2xl font-bold text-primary">${selectedItem.precioVenta.toLocaleString()}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Stock</Label>
-                    <p className="text-2xl font-bold">
-                      {selectedItem.stock} <span className="text-sm font-normal text-muted-foreground">unidades</span>
-                    </p>
-                  </div>
-                </div>
+      <DialogCompatibilidad
+        isCompatibilityMode={isCompatibilityMode}
+        setIsCompatibilityMode={setIsCompatibilityMode}
+        selectedItem={selectedItem}
+        compatibilidadEdit={compatibilidadEdit}
+        toggleCompatibilidad={toggleCompatibilidad}
+        guardarCompatibilidad={guardarCompatibilidad}
+        celularesDisponibles={celularesDisponibles}
+      />
 
-                <div className="space-y-3 pt-4 border-t">
-                  <Label className="font-semibold">Especificaciones</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(selectedItem.atributos).map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <Label className="text-xs text-muted-foreground capitalize">{key}</Label>
-                        <p className="text-sm font-semibold">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
-                <div className="flex gap-3 pt-6">
-                  <Button className="flex-1">Editar Producto</Button>
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleEditCompatibility(selectedItem)
-                    }}
-                  >
-                    <Smartphone className="mr-2 h-4 w-4" />
-                    Compatibilidad
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isEditMode}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsEditMode(false)
-            setSelectedItem(null)
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Smartphone className="h-5 w-5" />
-              Configurar Compatibilidad
-            </DialogTitle>
-          </DialogHeader>
-          {selectedItem && (
-            <div className="space-y-6">
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="font-semibold">{selectedItem.nombre}</p>
-                <p className="text-sm text-muted-foreground">{selectedItem.categoria}</p>
-              </div>
-
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Selecciona los dispositivos compatibles:</Label>
-                <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto p-2">
-                  {celularesDisponibles.map((celular) => (
-                    <div key={celular} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50">
-                      <Checkbox
-                        id={celular}
-                        checked={compatibilidadEdit.includes(celular)}
-                        onCheckedChange={() => toggleCompatibilidad(celular)}
-                      />
-                      <label htmlFor={celular} className="text-sm font-medium leading-none cursor-pointer flex-1">
-                        {celular}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t">
-                <p className="text-sm text-muted-foreground">
-                  {compatibilidadEdit.length} dispositivo(s) seleccionado(s)
-                </p>
-                <Button onClick={guardarCompatibilidad}>Guardar Cambios</Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás completamente seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará el producto "{selectedItem?.nombre}" permanentemente del inventario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

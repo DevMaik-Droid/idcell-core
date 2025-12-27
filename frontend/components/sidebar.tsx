@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Package, ShoppingCart, Wrench, Users, UserCog, Store, LogOut } from "lucide-react"
-import { cn } from "@/shared/lib/utils"
+import { cn } from "@/lib/utils"
 import { useAuth } from "@/shared/hooks/use-auth"
 import { canAccessRoute } from "@/shared/lib/route-guards"
 import { Button } from "@/components/ui/button"

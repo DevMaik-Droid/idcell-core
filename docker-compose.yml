@@ -1,7 +1,21 @@
 services:
+
+  nginx:
+    image: nginx:alpine3.22
+    container_name: idcell-nginx
+    ports:
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - cellnet
+
   database:
     image: postgres:18.1-alpine3.23
-    container_name: database
+    container_name: idcell-database
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -14,10 +28,83 @@ services:
       - ./infra/database/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - cellnet
+
+  redis:
+    image: redis:8.2-alpine3.22
+    container_name: idcell-redis
+    networks:
+      - cellnet
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
     
+  minio:
+    image: minio/minio:latest
+    container_name: idcell-minio
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+    volumes:
+      - minio_data:/data
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - cellnet
+
+  backend:
+    build: ./backend
+    container_name: idcell-backend
+    restart: always
+    volumes:
+      - ./backend:/app
+      - /etc/localtime:/etc/localtime:ro
+      
+    ports:
+      - "5000:5000"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      REDIS_URL: ${REDIS_URL}
+      SERVIDOR_APP : ${SERVIDOR_APP}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_REGION: ${MINIO_REGION}
+    depends_on:
+      - database
+      - redis
+    networks:
+      - cellnet
+
+  frontend:
+    build: ./frontend
+    container_name: idcell-frontend
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+      - /etc/localtime:/etc/localtime:ro
+      
+    environment:
+      - NEXT_PUBLIC_API_URL=${SERVIDOR_APP}/api
+    depends_on:
+      - backend
+    networks:
+      - cellnet
 
 volumes:
   postgres_data:
+  redis_data:
+  minio_data:
 
 networks:
   cellnet:

@@ -8,8 +8,9 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "IdCell",
-  description: "sistema web de gestion de telefonos inteligentes",
+  title: "ID-Cell",
+  description: "plataforma de gestion de ventas de celulares",
+  generator: "ID-Cell",
   icons: {
     icon: [
       {
@@ -35,8 +36,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es">
-      
+    <html lang="en">
       <body className={`font-sans antialiased`}>
         <AuthProvider>{children}</AuthProvider>
       </body>

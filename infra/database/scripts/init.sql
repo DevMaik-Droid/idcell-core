@@ -26,15 +26,35 @@ CREATE TABLE categorias (
 
 CREATE TABLE productos (
     id SERIAL PRIMARY KEY,
-    categoria_id INTEGER REFERENCES categorias(id),
+
+    -- Relación
+    categoria_id INTEGER NOT NULL REFERENCES categorias(id),
+
+    -- Identificación
     nombre VARCHAR(150) NOT NULL,
     sku VARCHAR(100) UNIQUE,
+
+    -- Contenido
     descripcion TEXT,
-    atributos JSONB DEFAULT '{}', -- color, modelo, capacidad, etc
-    precio_compra NUMERIC(10,2),
-    precio_venta NUMERIC(10,2),
+    imagen TEXT, -- ruta o URL (CDN, S3, etc)
+
+    -- Inventario
+    stock INTEGER NOT NULL DEFAULT 0,
+
+    -- Precios
+    precio_compra NUMERIC(10,2) NOT NULL,
+    precio_venta NUMERIC(10,2) NOT NULL,
+
+    -- Datos flexibles
+    atributos JSONB DEFAULT '{}'::jsonb,
+    compatibilidad JSONB DEFAULT '[]'::jsonb,
+
+    -- Estado
     activo BOOLEAN DEFAULT TRUE,
-    creado_en TIMESTAMP DEFAULT now()
+
+    -- Auditoría
+    creado_en TIMESTAMP DEFAULT now(),
+    actualizado_en TIMESTAMP DEFAULT now()
 );
 
 CREATE TABLE stock_sucursal (

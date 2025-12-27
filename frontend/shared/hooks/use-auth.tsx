@@ -29,6 +29,8 @@ const STATIC_SUCURSALES: Sucursal[] = [
 interface AuthContextType {
   user: User | null
   token: string | null
+  ventasHoy: number | null
+  
   sucursalActivaId: string | null
   sucursal: Sucursal | null
   sucursales: Sucursal[]
